@@ -62,6 +62,7 @@ export interface QuestionStats {
 
 export interface FormStats {
   formId: string;
+  formTitle: string;
   totalResponses: number;
   completionRate: number;
   averageTimeSeconds: number;

@@ -8,17 +8,35 @@ import { Button } from '@/app/components/ui/Button';
 import { Logo } from '@/app/components/ui/Logo';
 import { useTheme } from '@/app/components/ThemeProvider';
 import { Icon } from '@/app/components/ui/Icon';
+import { useAuth, ApiResponseError } from '@/app/components/AuthProvider';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
+  const { login } = useAuth();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // UI-only: simulate login
-    router.push('/dashboard');
+    setError('');
+    setIsLoading(true);
+
+    try {
+      await login(email, password);
+      // login() handles the redirect
+    } catch (err) {
+      if (err instanceof ApiResponseError) {
+        setError(err.message);
+      } else {
+        setError('An unexpected error occurred. Please try again.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -70,6 +88,13 @@ export default function LoginPage() {
 
           <h1 className="text-2xl font-bold text-on-surface mb-4">Sign in</h1>
 
+          {error && (
+            <div className="mb-6 p-4 rounded-xl bg-error-container text-on-error-container text-sm flex items-start gap-3">
+              <Icon name="error" size={20} className="shrink-0 mt-0.5" />
+              <p>{error}</p>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-5">
             <TextField
               label="Email"
@@ -98,20 +123,10 @@ export default function LoginPage() {
               </button>
             </div>
 
-            <Button variant="filled" className="w-full" type="submit">
-              Sign in
+            <Button variant="filled" className="w-full" type="submit" disabled={isLoading}>
+              {isLoading ? 'Signing in...' : 'Sign in'}
             </Button>
           </form>
-
-          <div className="flex items-center gap-4 my-8">
-            <div className="flex-1 h-px bg-outline-variant" />
-            <span className="text-xs text-on-surface-variant uppercase tracking-wider">or</span>
-            <div className="flex-1 h-px bg-outline-variant" />
-          </div>
-
-          <Button variant="outlined" className="w-full" icon="public">
-            Continue with Google
-          </Button>
 
           <p className="text-center text-sm text-on-surface-variant mt-8">
             Don&apos;t have an account?{' '}

@@ -8,22 +8,41 @@ import { Button } from '@/app/components/ui/Button';
 import { Logo } from '@/app/components/ui/Logo';
 import { useTheme } from '@/app/components/ThemeProvider';
 import { Icon } from '@/app/components/ui/Icon';
+import { useAuth, ApiResponseError } from '@/app/components/AuthProvider';
 
 export default function RegisterPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
+  const { register } = useAuth();
 
   const passwordsMatch = password === confirmPassword || confirmPassword === '';
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!passwordsMatch) return;
-    // UI-only: simulate registration
-    router.push('/dashboard');
+    
+    setError('');
+    setIsLoading(true);
+
+    try {
+      await register(name, email, password);
+      // register() handles the redirect
+    } catch (err) {
+      if (err instanceof ApiResponseError) {
+        setError(err.message);
+      } else {
+        setError('An unexpected error occurred. Please try again.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -75,6 +94,13 @@ export default function RegisterPage() {
 
           <h1 className="text-2xl font-bold text-on-surface mb-4">Create account</h1>
 
+          {error && (
+            <div className="mb-6 p-4 rounded-xl bg-error-container text-on-error-container text-sm flex items-start gap-3">
+              <Icon name="error" size={20} className="shrink-0 mt-0.5" />
+              <p>{error}</p>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-5">
             <TextField
               label="Full name"
@@ -111,20 +137,10 @@ export default function RegisterPage() {
               errorText="Passwords do not match"
             />
 
-            <Button variant="filled" className="w-full" type="submit">
-              Create account
+            <Button variant="filled" className="w-full" type="submit" disabled={isLoading || !passwordsMatch}>
+              {isLoading ? 'Creating account...' : 'Create account'}
             </Button>
           </form>
-
-          <div className="flex items-center gap-4 my-8">
-            <div className="flex-1 h-px bg-outline-variant" />
-            <span className="text-xs text-on-surface-variant uppercase tracking-wider">or</span>
-            <div className="flex-1 h-px bg-outline-variant" />
-          </div>
-
-          <Button variant="outlined" className="w-full" icon="public">
-            Continue with Google
-          </Button>
 
           <p className="text-center text-sm text-on-surface-variant mt-8">
             Already have an account?{' '}
