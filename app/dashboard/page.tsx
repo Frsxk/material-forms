@@ -68,6 +68,10 @@ export default function DashboardPage() {
   const totalForms = forms.length;
   const publishedForms = forms.filter((f) => f.status === 'published').length;
   const totalResponses = forms.reduce((acc, f) => acc + (f.responseCount || 0), 0);
+  const formsWithResponses = forms.filter((f) => f.status === 'published' && (f.responseCount || 0) > 0).length;
+  const completionRate = publishedForms > 0
+    ? `${Math.round((formsWithResponses / publishedForms) * 100)}%`
+    : '—';
 
   return (
     <div>
@@ -84,7 +88,7 @@ export default function DashboardPage() {
           { icon: 'description', label: 'Total Forms', value: totalForms.toString(), color: 'bg-primary-container text-on-primary-container' },
           { icon: 'visibility', label: 'Published', value: publishedForms.toString(), color: 'bg-secondary-container text-on-secondary-container' },
           { icon: 'group', label: 'Total Responses', value: totalResponses.toString(), color: 'bg-tertiary-container text-on-tertiary-container' },
-          { icon: 'trending_up', label: 'Completion Rate', value: 'N/A', color: 'bg-primary-container text-on-primary-container' },
+          { icon: 'trending_up', label: 'Response Rate', value: completionRate, color: 'bg-primary-container text-on-primary-container' },
         ].map((card) => (
           <div
             key={card.label}

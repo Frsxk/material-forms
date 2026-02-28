@@ -86,11 +86,11 @@ export default function LandingPage() {
               Get Started
             </Link>
             <Link
-              href="/builder/demo"
+              href="/dashboard"
               className="inline-flex items-center gap-2 rounded-full border border-outline px-8 py-3.5 text-primary font-medium hover:bg-primary/8 transition-all duration-300"
             >
-              <span className="material-symbols-rounded text-xl">visibility</span>
-              Try Demo
+              <span className="material-symbols-rounded text-xl">dashboard</span>
+              Dashboard
             </Link>
           </div>
         </div>
@@ -108,7 +108,10 @@ export default function LandingPage() {
                 <span className="material-symbols-rounded text-sm">visibility</span>
                 Preview
               </div>
-              <div className="rounded-full bg-primary px-3 py-1.5 text-xs text-on-primary">Publish</div>
+              <div className="rounded-full bg-primary px-3 py-1.5 text-xs text-on-primary flex items-center gap-1">
+                <span className="material-symbols-rounded text-sm">share</span>
+                Publish
+              </div>
             </div>
           </div>
           <div className="p-8 space-y-4">

@@ -3,8 +3,8 @@
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getFormStats } from '@/lib/api';
-import type { FormStats } from '@/lib/types';
+import { getFormStats, exportFormCsv } from '@/lib/api';
+import type { FormStats, QuestionStats } from '@/lib/types';
 import { Icon } from '@/app/components/ui/Icon';
 import { Logo } from '@/app/components/ui/Logo';
 import { useTheme } from '@/app/components/ThemeProvider';
@@ -26,6 +26,7 @@ export default function StatsPage() {
   const [stats, setStats] = useState<FormStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     if (authLoading || !user) return;
@@ -96,6 +97,27 @@ export default function StatsPage() {
             aria-label="Toggle theme"
           >
             <Icon name={theme === 'dark' ? 'light_mode' : 'dark_mode'} size={20} />
+          </button>
+          <button
+            onClick={async () => {
+              setExporting(true);
+              try {
+                await exportFormCsv(formId, stats?.formTitle);
+              } catch (err: any) {
+                setError(err.message || 'Failed to export CSV');
+              } finally {
+                setExporting(false);
+              }
+            }}
+            disabled={exporting}
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-3 md:px-4 py-2 text-sm font-medium text-on-primary hover:shadow-(--m3-shadow-1) transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {exporting ? (
+              <div className="w-4 h-4 border-2 border-on-primary border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Icon name="download" size={16} />
+            )}
+            <span className="hidden sm:inline">Export CSV</span>
           </button>
           <Link
             href={`/builder/${formId}`}
@@ -216,44 +238,7 @@ export default function StatsPage() {
                         </span>
                       </div>
 
-                      {qs.distribution && Object.keys(qs.distribution).length > 0 && (
-                        <div className="space-y-3 mt-4">
-                          {Object.entries(qs.distribution).map(([label, count]) => {
-                            const maxVal = Math.max(...Object.values(qs.distribution!));
-                            const percent = qs.totalAnswers === 0 ? 0 : Math.round((count as number / qs.totalAnswers) * 100);
-                            const barWidth = maxVal === 0 ? 0 : ((count as number) / maxVal) * 100;
-                            return (
-                              <div key={label}>
-                                <div className="flex items-center justify-between mb-1">
-                                  <span className="text-sm text-on-surface">{label}</span>
-                                  <span className="text-xs text-on-surface-variant font-medium">
-                                    {count as number} ({percent}%)
-                                  </span>
-                                </div>
-                                <div className="h-3 rounded-full bg-surface-container-highest overflow-hidden">
-                                  <div
-                                    className="h-full rounded-full bg-primary transition-all duration-500"
-                                    style={{ width: `${barWidth}%` }}
-                                  />
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-
-                      {qs.averageValue !== undefined && qs.averageValue !== null && !qs.distribution && (
-                        <div className="mt-4 flex items-center gap-3">
-                          <div className="text-3xl font-bold text-primary">{Number(qs.averageValue).toFixed(1)}</div>
-                          <span className="text-sm text-on-surface-variant">average rating</span>
-                        </div>
-                      )}
-
-                      {(qs.questionType === 'long_text' || qs.questionType === 'short_text') && (
-                        <div className="mt-4 rounded-xl bg-surface-container p-4 text-sm text-on-surface-variant italic">
-                          Text responses collected — {qs.totalAnswers} submissions total. View full export for raw text.
-                        </div>
-                      )}
+                      <QuestionChart qs={qs} />
                     </div>
                   ))}
                 </div>
@@ -309,6 +294,310 @@ function SummaryCard({
       <div>
         <p className="text-sm text-on-surface-variant">{label}</p>
         <p className="text-2xl font-bold text-on-surface">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Chart Color Palette ───
+const CHART_COLORS = [
+  'var(--m3-primary)',
+  'var(--m3-tertiary)',
+  'var(--m3-secondary)',
+  '#16a34a',
+  '#ea580c',
+  '#0891b2',
+  '#7c3aed',
+  '#db2777',
+  '#ca8a04',
+  '#4f46e5',
+];
+
+// ─── QuestionChart — dispatcher ───
+function QuestionChart({ qs }: { qs: QuestionStats }) {
+  switch (qs.questionType) {
+    case 'multiple_choice':
+    case 'dropdown':
+      return qs.distribution && Object.keys(qs.distribution).length > 0
+        ? <DonutChart distribution={qs.distribution} total={qs.totalAnswers} />
+        : <EmptyChart />;
+
+    case 'checkbox':
+      return qs.distribution && Object.keys(qs.distribution).length > 0
+        ? <HorizontalBarChart distribution={qs.distribution} total={qs.totalAnswers} />
+        : <EmptyChart />;
+
+    case 'scale':
+      return qs.distribution && Object.keys(qs.distribution).length > 0
+        ? <ScaleBarChart distribution={qs.distribution} total={qs.totalAnswers} average={qs.averageValue} />
+        : <EmptyChart />;
+
+    case 'rating':
+      return qs.distribution && Object.keys(qs.distribution).length > 0
+        ? <RatingBreakdown distribution={qs.distribution} total={qs.totalAnswers} average={qs.averageValue} max={Math.max(...Object.keys(qs.distribution).map(Number))} />
+        : <EmptyChart />;
+
+    case 'short_text':
+    case 'long_text':
+      return (
+        <div className="mt-2 rounded-xl bg-surface-container p-4 text-sm text-on-surface-variant italic flex items-center gap-2">
+          <Icon name="text_fields" size={18} className="opacity-60" />
+          Text responses collected — {qs.totalAnswers} submission{qs.totalAnswers !== 1 ? 's' : ''} total. Export CSV for raw text.
+        </div>
+      );
+
+    case 'date':
+      return (
+        <div className="mt-2 rounded-xl bg-surface-container p-4 text-sm text-on-surface-variant italic flex items-center gap-2">
+          <Icon name="calendar_month" size={18} className="opacity-60" />
+          Date responses collected — {qs.totalAnswers} submission{qs.totalAnswers !== 1 ? 's' : ''} total. Export CSV for details.
+        </div>
+      );
+
+    default:
+      return <EmptyChart />;
+  }
+}
+
+function EmptyChart() {
+  return (
+    <div className="mt-2 rounded-xl bg-surface-container p-6 flex flex-col items-center justify-center text-on-surface-variant">
+      <Icon name="bar_chart" size={28} className="mb-1 opacity-40" />
+      <p className="text-sm">No data yet</p>
+    </div>
+  );
+}
+
+// ─── Donut Chart (multiple_choice, dropdown) ───
+function DonutChart({
+  distribution,
+  total,
+}: {
+  distribution: Record<string, number>;
+  total: number;
+}) {
+  const entries = Object.entries(distribution).filter(([, v]) => v > 0);
+  if (entries.length === 0) return <EmptyChart />;
+
+  const SIZE = 160;
+  const STROKE = 28;
+  const RADIUS = (SIZE - STROKE) / 2;
+  const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+
+  let accumulated = 0;
+  const segments = entries.map(([label, count], i) => {
+    const fraction = total > 0 ? count / total : 0;
+    const dashLength = fraction * CIRCUMFERENCE;
+    const dashOffset = -accumulated * CIRCUMFERENCE;
+    accumulated += fraction;
+    return { label, count, fraction, dashLength, dashOffset, color: CHART_COLORS[i % CHART_COLORS.length] };
+  });
+
+  return (
+    <div className="mt-4 flex flex-col sm:flex-row items-center gap-6 sm:gap-10">
+      {/* SVG donut */}
+      <div className="relative shrink-0" style={{ width: SIZE, height: SIZE }}>
+        <svg width={SIZE} height={SIZE} className="-rotate-90">
+          {/* Background ring */}
+          <circle
+            cx={SIZE / 2} cy={SIZE / 2} r={RADIUS}
+            fill="none"
+            stroke="var(--m3-surface-container-highest)"
+            strokeWidth={STROKE}
+          />
+          {/* Segments */}
+          {segments.map((seg) => (
+            <circle
+              key={seg.label}
+              cx={SIZE / 2} cy={SIZE / 2} r={RADIUS}
+              fill="none"
+              stroke={seg.color}
+              strokeWidth={STROKE}
+              strokeDasharray={`${seg.dashLength} ${CIRCUMFERENCE - seg.dashLength}`}
+              strokeDashoffset={seg.dashOffset}
+              strokeLinecap="butt"
+              className="transition-all duration-700"
+            />
+          ))}
+        </svg>
+        {/* Center label */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-2xl font-bold text-on-surface">{total}</span>
+          <span className="text-[10px] text-on-surface-variant">total</span>
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-col gap-2 min-w-0 flex-1">
+        {segments.map((seg) => {
+          const percent = total > 0 ? Math.round((seg.count / total) * 100) : 0;
+          return (
+            <div key={seg.label} className="flex items-center gap-3">
+              <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: seg.color }} />
+              <span className="text-sm text-on-surface truncate flex-1">{seg.label}</span>
+              <span className="text-xs text-on-surface-variant font-medium whitespace-nowrap">
+                {seg.count} ({percent}%)
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Horizontal Bar Chart (checkbox) ───
+function HorizontalBarChart({
+  distribution,
+  total,
+}: {
+  distribution: Record<string, number>;
+  total: number;
+}) {
+  const entries = Object.entries(distribution);
+  const maxVal = Math.max(...entries.map(([, v]) => v), 1);
+
+  return (
+    <div className="mt-4 space-y-3">
+      {entries.map(([label, count], i) => {
+        const percent = total > 0 ? Math.round((count / total) * 100) : 0;
+        const barWidth = maxVal > 0 ? (count / maxVal) * 100 : 0;
+        const color = CHART_COLORS[i % CHART_COLORS.length];
+        return (
+          <div key={label}>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm text-on-surface truncate flex-1 mr-3">{label}</span>
+              <span className="text-xs text-on-surface-variant font-medium whitespace-nowrap">
+                {count} ({percent}%)
+              </span>
+            </div>
+            <div className="h-4 rounded-full bg-surface-container-highest overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-700"
+                style={{ width: `${barWidth}%`, backgroundColor: color }}
+              />
+            </div>
+          </div>
+        );
+      })}
+      <p className="text-xs text-on-surface-variant mt-2 italic">
+        Percentages may exceed 100% — respondents can select multiple options.
+      </p>
+    </div>
+  );
+}
+
+// ─── Scale Bar Chart (vertical histogram) ───
+function ScaleBarChart({
+  distribution,
+  total,
+  average,
+}: {
+  distribution: Record<string, number>;
+  total: number;
+  average?: number;
+}) {
+  const keys = Object.keys(distribution).map(Number).sort((a, b) => a - b);
+  const maxCount = Math.max(...keys.map((k) => distribution[k.toString()] ?? 0), 1);
+  const BAR_HEIGHT = 140;
+
+  return (
+    <div className="mt-4">
+      {average !== undefined && average !== null && (
+        <div className="flex items-center gap-2 mb-5">
+          <div className="text-3xl font-bold text-primary">{average.toFixed(1)}</div>
+          <span className="text-sm text-on-surface-variant">average score</span>
+        </div>
+      )}
+
+      <div className="flex items-end gap-3 md:gap-4" style={{ height: `${BAR_HEIGHT + 40}px` }}>
+        {keys.map((key) => {
+          const count = distribution[key.toString()] ?? 0;
+          const barH = maxCount > 0 ? Math.max(4, (count / maxCount) * BAR_HEIGHT) : 4;
+          const percent = total > 0 ? Math.round((count / total) * 100) : 0;
+          const isAvg = average !== undefined && Math.round(average) === key;
+          return (
+            <div key={key} className="flex-1 flex flex-col items-center justify-end gap-1.5">
+              <span className="text-xs text-on-surface-variant font-medium">{percent}%</span>
+              <div
+                className={`w-full rounded-t-xl transition-all duration-700 ${isAvg ? 'bg-primary' : 'bg-primary/50'}`}
+                style={{ height: `${barH}px` }}
+              />
+              <span className={`text-sm font-medium ${isAvg ? 'text-primary' : 'text-on-surface-variant'}`}>
+                {key}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Rating Breakdown (stars + per-level bars) ───
+function RatingBreakdown({
+  distribution,
+  total,
+  average,
+  max,
+}: {
+  distribution: Record<string, number>;
+  total: number;
+  average?: number;
+  max: number;
+}) {
+  const maxCount = Math.max(...Object.values(distribution), 1);
+  // Build from highest to lowest
+  const levels = Array.from({ length: max }, (_, i) => max - i);
+
+  return (
+    <div className="mt-4">
+      {/* Average stars */}
+      {average !== undefined && average !== null && (
+        <div className="flex items-center gap-3 mb-5">
+          <div className="text-3xl font-bold text-primary">{average.toFixed(1)}</div>
+          <div className="flex gap-0.5">
+            {Array.from({ length: max }, (_, i) => {
+              const filled = i < Math.round(average);
+              return (
+                <Icon
+                  key={i}
+                  name="star"
+                  size={24}
+                  filled={filled}
+                  className={filled ? 'text-primary' : 'text-outline-variant'}
+                />
+              );
+            })}
+          </div>
+          <span className="text-sm text-on-surface-variant">({total} ratings)</span>
+        </div>
+      )}
+
+      {/* Per-level horizontal bars */}
+      <div className="space-y-2">
+        {levels.map((level) => {
+          const count = distribution[level.toString()] ?? 0;
+          const barWidth = maxCount > 0 ? (count / maxCount) * 100 : 0;
+          const percent = total > 0 ? Math.round((count / total) * 100) : 0;
+          return (
+            <div key={level} className="flex items-center gap-3">
+              <div className="flex items-center gap-0.5 w-14 shrink-0 justify-end">
+                <span className="text-sm font-medium text-on-surface">{level}</span>
+                <Icon name="star" size={16} filled className="text-primary" />
+              </div>
+              <div className="flex-1 h-3 rounded-full bg-surface-container-highest overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-700"
+                  style={{ width: `${barWidth}%` }}
+                />
+              </div>
+              <span className="text-xs text-on-surface-variant font-medium w-16 text-right">
+                {count} ({percent}%)
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

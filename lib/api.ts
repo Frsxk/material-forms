@@ -169,3 +169,28 @@ export function submitForm(
 export function getFormStats(id: string): Promise<FormStats> {
   return apiFetch<FormStats>(`/forms/${id}/stats`);
 }
+
+export async function exportFormCsv(id: string, title?: string): Promise<void> {
+  const token = getToken();
+  const res = await fetch(`${API_URL}/forms/${id}/export`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new ApiResponseError(res.status, body);
+  }
+
+  const blob = await res.blob();
+  const safeName = title?.replace(/[^a-zA-Z0-9-_ ]/g, '').trim();
+  const filename = (safeName ? `${safeName}.csv` : 'export.csv');
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

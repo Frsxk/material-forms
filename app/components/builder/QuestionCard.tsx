@@ -14,6 +14,12 @@ interface QuestionCardProps {
   onUpdate: (updated: Question) => void;
   onDelete: () => void;
   onDuplicate: () => void;
+  isDragOver?: boolean;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDragLeave?: (e: React.DragEvent) => void;
+  onDrop?: (e: React.DragEvent) => void;
+  onDragEnd?: (e: React.DragEvent) => void;
 }
 
 export function QuestionCard({
@@ -27,17 +33,29 @@ export function QuestionCard({
   onUpdate,
   onDelete,
   onDuplicate,
+  isDragOver,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragEnd,
 }: QuestionCardProps) {
   const typeLabel = question.type.replace(/_/g, ' ').toUpperCase();
 
   return (
     <div
       onClick={onClick}
-      className={`rounded-(--m3-shape-xl) p-8 transition-all duration-300 cursor-pointer border-l-4 border ${
+      draggable={isActive}
+      onDragStart={isActive ? onDragStart : undefined}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+      className={`rounded-(--m3-shape-xl) p-8 ${isActive ? 'pt-0' : ''} transition-all duration-300 cursor-pointer border-l-4 border ${
         isActive
           ? 'bg-surface-container shadow-(--m3-shadow-2)'
           : 'bg-surface-container-low border-transparent hover:bg-surface-container hover:border-outline-variant'
-      }`}
+      } ${isDragOver ? 'ring-2 ring-primary ring-offset-2 ring-offset-surface' : ''}`}
       style={{
         animationDelay: `${index * 80}ms`,
         borderLeftColor: isActive ? themeColor : 'transparent',
@@ -46,6 +64,16 @@ export function QuestionCard({
         borderBottomColor: isActive ? themeColor + '40' : undefined,
       }}
     >
+      {/* Drag handle */}
+      {isActive && (
+        <div
+          className="flex justify-center py-1.5 cursor-grab active:cursor-grabbing text-on-surface-variant/40 hover:text-on-surface-variant transition-colors"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <Icon name="reorder" size={20} />
+        </div>
+      )}
+
       {/* Meta */}
       <div className="flex items-center justify-between mb-4">
         <span className="font-mono text-xs tracking-wider uppercase" style={{ color: themeColor }}>

@@ -7,6 +7,7 @@ import { QuestionCard } from '@/app/components/builder/QuestionCard';
 import { Inspector } from '@/app/components/builder/Inspector';
 import type { InspectorPanel, ThemeSettings } from '@/app/components/builder/Inspector';
 import { Icon } from '@/app/components/ui/Icon';
+import { Toast } from '@/app/components/ui/Toast';
 import { getForm, updateForm } from '@/lib/api';
 import type { Form, Question, QuestionType, FormStatus } from '@/lib/types';
 import { useAuth } from '@/app/components/AuthProvider';
@@ -74,6 +75,9 @@ export default function BuilderPage() {
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   // Use refs to track latest state for the debounced save
   const titleRef = useRef(title);
@@ -132,7 +136,9 @@ export default function BuilderPage() {
         setSaving(false);
       } catch (err) {
         console.error('Auto-save failed:', err);
-        setSaving(false); // Still false so UI doesn't spin forever, but maybe show a toast in future
+        setSaving(false);
+        const message = err instanceof Error ? err.message : 'Auto-save failed';
+        setSaveError(message);
       }
     }, 1000); // 1s debounce
   }, [formId]);
@@ -176,6 +182,17 @@ export default function BuilderPage() {
     setActiveQuestionId(newQ.id);
     triggerSave();
   };
+
+  const handleReorder = useCallback((fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return;
+    setQuestions((prev) => {
+      const updated = [...prev];
+      const [moved] = updated.splice(fromIndex, 1);
+      updated.splice(toIndex, 0, moved);
+      return updated;
+    });
+    triggerSave();
+  }, [triggerSave]);
 
   const handleThemeChange = useCallback((updated: ThemeSettings) => {
     setThemeSettings(updated);
@@ -282,6 +299,30 @@ export default function BuilderPage() {
                 onUpdate={handleUpdateQuestion}
                 onDelete={() => handleDeleteQuestion(q.id)}
                 onDuplicate={() => handleDuplicateQuestion(q.id)}
+                isDragOver={dragOverIndex === i}
+                onDragStart={(e) => {
+                  setDragIndex(i);
+                  e.dataTransfer.effectAllowed = 'move';
+                  e.dataTransfer.setData('text/plain', i.toString());
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  setDragOverIndex(i);
+                }}
+                onDragLeave={() => setDragOverIndex(null)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOverIndex(null);
+                  if (dragIndex !== null) {
+                    handleReorder(dragIndex, i);
+                  }
+                  setDragIndex(null);
+                }}
+                onDragEnd={() => {
+                  setDragIndex(null);
+                  setDragOverIndex(null);
+                }}
               />
             ))}
           </div>
@@ -308,6 +349,9 @@ export default function BuilderPage() {
           onMobileClose={() => setInspectorOpen(false)}
         />
       </div>
+
+      {/* Autosave error toast */}
+      <Toast message={saveError} onDismiss={() => setSaveError(null)} />
 
       {/* Mobile bottom navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-surface-container border-t border-outline-variant flex items-center justify-around h-16 px-2">

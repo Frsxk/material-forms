@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { getPublicForm, submitForm } from '@/lib/api';
+import { getPublicForm, submitForm, ApiResponseError } from '@/lib/api';
 import { Icon } from '@/app/components/ui/Icon';
 import { useTheme } from '@/app/components/ThemeProvider';
 import type { PublicForm } from '@/lib/api';
@@ -22,6 +22,30 @@ export default function PublicFormPage() {
   const [submitting, setSubmitting] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [cooldown, setCooldown] = useState(0);
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Cleanup cooldown timer on unmount
+  useEffect(() => {
+    return () => {
+      if (cooldownRef.current) clearInterval(cooldownRef.current);
+    };
+  }, []);
+
+  const startCooldown = useCallback((seconds: number) => {
+    if (cooldownRef.current) clearInterval(cooldownRef.current);
+    setCooldown(seconds);
+    cooldownRef.current = setInterval(() => {
+      setCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(cooldownRef.current!);
+          cooldownRef.current = null;
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, []);
 
   useEffect(() => {
     getPublicForm(formId)
@@ -99,13 +123,18 @@ export default function PublicFormPage() {
     if (!validateForm()) return;
 
     setSubmitting(true);
+    setValidationErrors((prev) => { const { submit, ...rest } = prev; return rest; });
     try {
       await submitForm(formId, answers);
       setSubmitted(true);
     } catch (err) {
       console.error('Submit error:', err);
-      // In a real app we might show a toast here. Re-using validation error state for simplicity.
-      setValidationErrors({ submit: 'Failed to submit form. Please try again.' });
+      if (err instanceof ApiResponseError && err.status === 429) {
+        const retryAfter = (err.body as any)?.retryAfterSeconds ?? 30;
+        startCooldown(retryAfter);
+      } else {
+        setValidationErrors({ submit: 'Failed to submit form. Please try again.' });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -214,18 +243,33 @@ export default function PublicFormPage() {
           </div>
         )}
 
+        {cooldown > 0 && (
+          <div className="p-4 rounded-xl bg-secondary-container text-on-secondary-container flex items-center gap-3 animate-fade-in">
+            <Icon name="schedule" size={20} />
+            <div>
+              <p className="text-sm font-medium">Please wait before submitting again</p>
+              <p className="text-xs mt-0.5 opacity-80">You can submit again in {cooldown}s</p>
+            </div>
+          </div>
+        )}
+
         {/* Submit */}
         {totalQuestions > 0 && (
           <div className="flex items-center justify-between pt-4">
             <button
               onClick={handleSubmit}
-              disabled={submitting}
+              disabled={submitting || cooldown > 0}
               className="inline-flex items-center gap-2 rounded-full bg-primary px-8 py-3 text-on-primary font-medium cursor-pointer hover:shadow-(--m3-shadow-2) transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? (
                 <>
                   <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
                   Submitting
+                </>
+              ) : cooldown > 0 ? (
+                <>
+                  <Icon name="schedule" size={18} />
+                  Wait {cooldown}s
                 </>
               ) : (
                 'Submit'
