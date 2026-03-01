@@ -5,7 +5,7 @@ A form builder inspired by Google Forms, built with Material Design 3. Create fo
 ## Tech Stack
 
 - **Frontend:** Next.js 16, React 19, TypeScript, Tailwind CSS 4
-- **Backend:** [material-backend](https://github.com/Frxsk/material-backend) - Elysia (Bun) + Prisma
+- **Backend:** [material-backend](https://github.com/Frsxk/material-backend) - Elysia (Bun) + Prisma
 - **Design:** Material Design 3 tokens, light/dark theme
 
 ## Features
@@ -24,7 +24,7 @@ A form builder inspired by Google Forms, built with Material Design 3. Create fo
 ### Prerequisites
 
 - Node.js 18+
-- The [material-backend](https://github.com/Frxsk/material-backend) running on `localhost:5000`
+- The [material-backend](https://github.com/Frsxk/material-backend) running on `localhost:5000`
 
 ### Installation
 
